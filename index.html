@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ADI OS Simulator — Liquid Glass Edition</title>
+  <style>
+    /* ===== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ СТЕКЛА (меняются из JS) ===== */
+    :root {
+      --glass-blur: 24px;
+      --glass-saturate: 2.2;
+      --glass-bg-opacity: 0.55;
+      --glass-border-opacity: 0.25;
+      --glass-gloss: none;
+      --glass-reflection: none;
+    }
+
+    /* ===== ОБЩИЕ СТИЛИ ===== */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'SF Pro Display', system-ui, -apple-system, sans-serif;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000;
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+
+    /* ===== ЭКРАН ВЫБОРА ОС ===== */
+    #selection-screen {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at center, #1e1e30 0%, #0b0b16 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 35px;
+      z-index: 10000;
+      transition: opacity 0.8s;
+      padding: 20px;
+    }
+
+    #selection-screen h1 {
+      font-size: 2.2rem;
+      font-weight: 300;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    }
+
+    .os-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 25px;
+      justify-content: center;
+      max-width: 900px;
+    }
+
+    .os-card {
+      width: 170px;
+      height: 200px;
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-radius: 24px;
+      border: 2px solid rgba(255, 255, 255, 0.18);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.35s cubic-bezier(0.23, 1, 0.32, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .os-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 24px;
+      background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.25), transparent 70%);
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .os-card:hover {
+      transform: translateY(-12px) scale(1.05);
+      border-color: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), 0 0 80px rgba(255, 255, 255, 0.1);
+    }
+
+    .os-card:hover::after {
+      opacity: 1;
+    }
+
+    .os-card:active {
+      transform: scale(0.94);
+      transition: 0.1s;
+    }
+
+    .os-icon {
+      font-size: 60px;
+      filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5));
+      transition: transform 0.3s;
+    }
+
+    .os-card:hover .os-icon {
+      transform: scale(1.15) rotate(2deg);
+    }
+
+    .os-name {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .os-ver {
+      font-size: 11px;
+      opacity: 0.55;
+      letter-spacing: 1px;
+    }
+
+    /* ===== ЭКРАН УСТАНОВКИ ===== */
+    #setup-screen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 9000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+    }
+
+    .setup-step {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 600px;
+      padding: 30px;
+      gap: 25px;
+      animation: fadeSlide 0.5s ease;
+    }
+
+    .setup-step.active {
+      display: flex;
+    }
+
+    @keyframes fadeSlide {
+      from {
+        opacity: 0;
+        transform: translateY(25px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .setup-title {
+      font-size: 2rem;
+      font-weight: 300;
+      letter-spacing: 2px;
+    }
+
+    .setup-text {
+      font-size: 1rem;
+      opacity: 0.75;
+      line-height: 1.6;
+    }
+
+    .setup-progress {
+      width: 320px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .setup-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 8px;
+      transition: width 0.5s ease;
+    }
+
+    .setup-btn {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: white;
+      padding: 10px 28px;
+      border-radius: 30px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      backdrop-filter: blur(10px);
+      letter-spacing: 1px;
+    }
+
+    .setup-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.03);
+    }
+
+    .license-box {
+      width: 100%;
+      height: 180px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      overflow-y: auto;
+      padding: 16px;
+      text-align: left;
+      font-size: 0.85rem;
+      opacity: 0.9;
+    }
+
+    /* ===== ОСНОВНОЙ ЭКРАН ===== */
+    #main-screen {
+      display: none;
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #desktop {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 50px;
+      background-size: cover;
+      background-position: center;
+      transition: background-image 1s;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      padding: 25px;
+      gap: 15px;
+      flex-direction: column;
+      z-index: 1;
+    }
+
+    .desktop-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 85px;
+      cursor: pointer;
+      padding: 8px 5px;
+      border-radius: 14px;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .desktop-icon:hover {
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(8px);
+      transform: translateY(-2px);
+    }
+
+    .desktop-icon:active {
+      transform: scale(0.9);
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .desktop-icon .icon-img {
+      font-size: 42px;
+      margin-bottom: 5px;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+      transition: transform 0.2s;
+    }
+
+    .desktop-icon:hover .icon-img {
+      transform: translateY(-4px);
+    }
+
+    .desktop-icon .icon-label {
+      font-size: 11px;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+      text-align: center;
+      word-wrap: break-word;
+      max-width: 80px;
+      line-height: 1.2;
+      font-weight: 500;
+    }
+
+    /* ===== ПАНЕЛЬ ЗАДАЧ ===== */
+    #taskbar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 50px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 8px;
+      z-index: 200;
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      background: rgba(25, 25, 35, var(--glass-bg-opacity));
+      border-top: 1px solid rgba(255, 255, 255, var(--glass-border-opacity));
+      box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+      transition: all 0.4s ease;
+    }
+
+    #start-btn {
+      height: 38px;
+      padding: 0 15px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 17px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: 0.2s;
+      letter-spacing: 0.5px;
+    }
+
+    #start-btn:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    #taskbar-clock {
+      margin-left: auto;
+      color: #fff;
+      font-size: 12px;
+      text-align: right;
+      line-height: 1.3;
+      padding: 4px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .taskbar-chips {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+    }
+
+    .taskbar-chip {
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      transition: 0.2s;
+    }
+
+    .taskbar-chip:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    .taskbar-chip.active {
+      background: rgba(255, 255, 255, 0.35);
+      border-bottom: 3px solid #fff;
+    }
+
+    /* ===== МЕНЮ ПУСК ===== */
+    #start-menu {
+      position: absolute;
+      bottom: 60px;
+      left: 10px;
+      width: 360px;
+      max-height: 500px;
+      border-radius: 18px;
+      background: rgba(30, 30, 45, var(--glass-bg-opacity));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border: 1px solid rgba(255, 255, 255, var(--glass-border-opacity));
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 250;
+      overflow-y: auto;
+      transition: all 0.4s ease;
+    }
+
+    .menu-item {
+      padding: 12px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      color: #fff;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: 0.2s;
+    }
+
+    .menu-item:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateX(4px);
+    }
+
+    /* ===== ОКНА ПРИЛОЖЕНИЙ ===== */
+    .app-window {
+      position: absolute;
+      min-width: 380px;
+      min-height: 260px;
+      background: rgba(40, 40, 55, var(--glass-bg-opacity));
+      backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, var(--glass-border-opacity));
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+      display: none;
+      flex-direction: column;
+      z-index: 100;
+      animation: windowOpen 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+      transition: backdrop-filter 0.4s, background 0.4s;
+    }
+
+    .app-window.glossy {
+      background: rgba(255, 255, 255, 0.12);
+      background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+    }
+
+    @keyframes windowOpen {
+      from {
+        opacity: 0;
+        transform: scale(0.85) translateY(25px);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
+    }
+
+    .window-header {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.08);
+      cursor: move;
+      font-weight: 600;
+      font-size: 14px;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .window-close {
+      margin-left: auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 70, 70, 0.8);
+      border: none;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: 0.2s;
+    }
+
+    .window-close:hover {
+      background: rgba(255, 30, 30, 1);
+      transform: scale(1.1);
+    }
+
+    .window-body {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+      color: #eee;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    /* ===== КОМПОНЕНТЫ ПРИЛОЖЕНИЙ ===== */
+    .notepad-textarea {
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.3);
+      border: none;
+      color: #fff;
+      resize: none;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .calc-display {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 12px;
+      font-size: 24px;
+      text-align: right;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+
+    .calc-buttons {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .calc-buttons button {
+      padding: 14px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .calc-buttons button:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .browser-url {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .browser-url input {
+      flex: 1;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      color: #fff;
+      border-radius: 8px;
+      outline: none;
+    }
+
+    .browser-iframe {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+      border: none;
+      border-radius: 8px;
+    }
+
+    .file-tree .folder {
+      cursor: pointer;
+      color: #8ab4f8;
+    }
+
+    .player-controls button {
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 30px;
+      cursor: pointer;
+    }
+
+    /* ===== НАСТРОЙКИ СТЕКЛА (только для macOS) ===== */
+    .glass-settings {
+      margin-top: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+    }
+
+    .glass-settings input[type=range] {
+      width: 100%;
+    }
+
+    /* ===== АДАПТИВНОСТЬ ===== */
+    @media (max-width: 700px) {
+      .os-card {
+        width: 120px;
+        height: 150px;
+      }
+      .os-icon {
+        font-size: 40px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== ЭКРАН ВЫБОРА ОС ==================== -->
+  <div id="selection-screen">
+    <h1>Выберите операционную систему</h1>
+    <div class="os-grid">
+      <div class="os-card" data-os="vista"><span class="os-icon">🪟</span><span class="os-name">Windows Vista</span><span class="os-ver">Build 6002</span></div>
+      <div class="os-card" data-os="win7"><span class="os-icon">🪟</span><span class="os-name">Windows 7</span><span class="os-ver">Build 7601</span></div>
+      <div class="os-card" data-os="win10"><span class="os-icon">🪟</span><span class="os-name">Windows 10</span><span class="os-ver">Build 19045</span></div>
+      <div class="os-card" data-os="win11"><span class="os-icon">🪟</span><span class="os-name">Windows 11</span><span class="os-ver">Build 22631</span></div>
+      <div class="os-card" data-os="mac26"><span class="os-icon">🍎</span><span class="os-name">macOS 26</span><span class="os-ver">Sequoia Pro</span></div>
+    </div>
+    <p style="opacity:0.5;">Нажмите на карточку, чтобы начать установку</p>
+  </div>
+
+  <!-- ==================== ЭКРАН УСТАНОВКИ ==================== -->
+  <div id="setup-screen">
+    <div class="setup-step" id="step-welcome">
+      <div style="font-size:70px;">💿</div>
+      <div class="setup-title">Загрузка установщика</div>
+      <div class="setup-text">Подготовка файлов...</div>
+      <div class="setup-progress"><div class="setup-progress-fill" style="width:0%"></div></div>
+    </div>
+    <div class="setup-step" id="step-language">
+      <div class="setup-title">Выбор языка</div>
+      <select style="padding:8px 16px; border-radius:8px; background:#222; color:#fff; border:1px solid #fff3;">
+        <option>Русский</option><option>English</option>
+      </select>
+      <button class="setup-btn" onclick="nextSetupStep()">Далее</button>
+    </div>
+    <div class="setup-step" id="step-license">
+      <div class="setup-title">Лицензионное соглашение</div>
+      <div class="license-box">Лицензионное соглашение...<br>Нажмите "Принимаю".</div>
+      <button class="setup-btn" onclick="nextSetupStep()">Принимаю</button>
+    </div>
+    <div class="setup-step" id="step-disk">
+      <div class="setup-title">Выбор раздела</div>
+      <div class="setup-text">Диск 0: Виртуальный SSD (126 ГБ)</div>
+      <button class="setup-btn" onclick="nextSetupStep()">Далее</button>
+    </div>
+    <div class="setup-step" id="step-copy">
+      <div class="setup-title">Копирование файлов</div>
+      <div class="setup-progress"><div class="setup-progress-fill" style="width:0%"></div></div>
+      <div class="setup-text" id="copy-status">0%</div>
+    </div>
+    <div class="setup-step" id="step-features">
+      <div class="setup-title">Установка компонентов</div>
+      <div class="setup-progress"><div class="setup-progress-fill" style="width:0%"></div></div>
+    </div>
+    <div class="setup-step" id="step-final">
+      <div class="setup-title">Установка завершена!</div>
+      <div class="setup-text">Добро пожаловать.</div>
+    </div>
+  </div>
+
+  <!-- ==================== ОСНОВНОЙ ЭКРАН ==================== -->
+  <div id="main-screen">
+    <div id="desktop"></div>
+    <div id="taskbar">
+      <button id="start-btn">⊞ Пуск</button>
+      <div class="taskbar-chips" id="taskbar-chips"></div>
+      <div id="taskbar-clock"></div>
+    </div>
+    <div id="start-menu"></div>
+  </div>
+
+  <script>
+    (function() {
+      // ==================== ГЛОБАЛЬНОЕ СОСТОЯНИЕ ====================
+      let currentOS = null;
+      let openWindows = {}; // id -> { el, title, appIndex, contentData }
+      let windowZ = 100;
+      let startMenuVisible = false;
+
+      // Настройки стекла (только для macOS 26)
+      let glassSettings = {
+        intensity: 0.8, // 0..1
+        type: 'matte'   // 'matte' или 'glossy'
+      };
+
+      // ==================== КОНФИГУРАЦИИ ОС ====================
+      const osConfig = {
+        vista: { name:'Windows Vista', build:'6002', icon:'🪟', wallpaper:'linear-gradient(135deg, #0a3d2e, #1a6b4a, #2d8c5e, #0f4a30)', taskbarGlass:true, isMac:false },
+        win7:  { name:'Windows 7', build:'7601', icon:'🪟', wallpaper:'linear-gradient(135deg, #1a3a5c, #2d608a, #4a90c4, #1e4d70)', taskbarGlass:true, isMac:false },
+        win10: { name:'Windows 10', build:'19045', icon:'🪟', wallpaper:'linear-gradient(135deg, #0a1a2e, #142840, #1e3d5c, #0d1f35)', taskbarGlass:false, isMac:false },
+        win11: { name:'Windows 11', build:'22631', icon:'🪟', wallpaper:'linear-gradient(135deg, #0d1b2a, #1b2d45, #2c4a6e, #162238)', taskbarGlass:true, isMac:false },
+        mac26: { name:'macOS 26', build:'Sequoia Pro', icon:'🍎', wallpaper:'linear-gradient(160deg, #1a0a2e, #2d1050, #4a2070, #1e1040)', taskbarGlass:true, isMac:true }
+      };
+
+      const appsList = [
+        { icon:'📁', label:'Проводник', createContent: ()=>createFileManager() },
+        { icon:'📝', label:'Блокнот', createContent: ()=>createNotepad() },
+        { icon:'🔢', label:'Калькулятор', createContent: ()=>createCalculator() },
+        { icon:'🌐', label:'Браузер', createContent: ()=>createBrowser() },
+        { icon:'🎵', label:'Плеер', createContent: ()=>createMusicPlayer() },
+        { icon:'⚙️', label:'Настройки', createContent: ()=>createSettings() },
+        { icon:'🖥️', label:'Терминал', createContent: ()=>createTerminal() },
+        { icon:'📷', label:'Фото', createContent: ()=>createPhotoViewer() }
+      ];
+
+      // ==================== DOM ЭЛЕМЕНТЫ ====================
+      const selectionScreen = document.getElementById('selection-screen');
+      const setupScreen = document.getElementById('setup-screen');
+      const mainScreen = document.getElementById('main-screen');
+      const desktop = document.getElementById('desktop');
+      const taskbar = document.getElementById('taskbar');
+      const startBtn = document.getElementById('start-btn');
+      const startMenu = document.getElementById('start-menu');
+      const taskbarClock = document.getElementById('taskbar-clock');
+      const taskbarChips = document.getElementById('taskbar-chips');
+
+      // ==================== ЧАСЫ ====================
+      function updateClock() {
+        if (!currentOS) return;
+        const now = new Date();
+        taskbarClock.innerHTML = now.toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) +
+          '<br><small>' + now.toLocaleDateString('ru-RU', {day:'numeric', month:'long'}) + '</small>';
+      }
+      setInterval(updateClock, 30000);
+
+      // ==================== УПРАВЛЕНИЕ СТЕКЛОМ ====================
+      function applyGlassEffect() {
+        const root = document.documentElement;
+        if (currentOS === 'mac26') {
+          const i = glassSettings.intensity;
+          if (glassSettings.type === 'matte') {
+            root.style.setProperty('--glass-blur', (18 + i * 20) + 'px');
+            root.style.setProperty('--glass-saturate', 1.8);
+            root.style.setProperty('--glass-bg-opacity', 0.45 + i * 0.3);
+            root.style.setProperty('--glass-border-opacity', 0.2);
+            root.style.setProperty('--glass-gloss', 'none');
+          } else { // glossy
+            root.style.setProperty('--glass-blur', (12 + i * 15) + 'px');
+            root.style.setProperty('--glass-saturate', 2.5);
+            root.style.setProperty('--glass-bg-opacity', 0.3 + i * 0.35);
+            root.style.setProperty('--glass-border-opacity', 0.4);
+            root.style.setProperty('--glass-gloss', 'linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%)');
+          }
+        } else {
+          // Обычное стекло для других ОС
+          root.style.setProperty('--glass-blur', '20px');
+          root.style.setProperty('--glass-saturate', '2');
+          root.style.setProperty('--glass-bg-opacity', '0.5');
+          root.style.setProperty('--glass-border-opacity', '0.25');
+        }
+      }
+
+      // ==================== СОХРАНЕНИЕ И ВОССТАНОВЛЕНИЕ ====================
+      function saveState() {
+        if (!currentOS) return;
+        const state = {
+          os: currentOS,
+          glass: glassSettings,
+          windows: Object.keys(openWindows).map(id => {
+            const win = openWindows[id];
+            return {
+              id,
+              appIndex: win.appIndex,
+              left: win.el.style.left,
+              top: win.el.style.top,
+              width: win.el.style.width,
+              height: win.el.style.height,
+              contentData: win.contentData
+            };
+          })
+        };
+        localStorage.setItem('adi-os-state', JSON.stringify(state));
+      }
+
+      function loadState() {
+        const saved = localStorage.getItem('adi-os-state');
+        if (!saved) return false;
+        try {
+          const state = JSON.parse(saved);
+          currentOS = state.os;
+          if (state.glass) glassSettings = state.glass;
+          applyGlassEffect();
+          // Пропускаем установку
+          setupScreen.style.display = 'none';
+          selectionScreen.style.display = 'none';
+          mainScreen.style.display = 'block';
+          const cfg = osConfig[currentOS];
+          desktop.style.backgroundImage = cfg.wallpaper;
+          startBtn.textContent = cfg.isMac ? '🍎' : '⊞ Пуск';
+          createDesktopIcons();
+          buildStartMenu();
+          updateClock();
+          // Восстанавливаем окна
+          if (state.windows) {
+            state.windows.forEach(w => {
+              const app = appsList[w.appIndex];
+              const win = createWindow(w.id, app.label, app.createContent(), w.appIndex);
+              win.el.style.left = w.left;
+              win.el.style.top = w.top;
+              win.el.style.width = w.width;
+              win.el.style.height = w.height;
+              if (w.contentData) {
+                win.contentData = w.contentData;
+                if (w.appIndex === 1) { // блокнот
+                  const ta = win.el.querySelector('textarea');
+                  if (ta) ta.value = w.contentData;
+                } else if (w.appIndex === 3) { // браузер
+                  const iframe = win.el.querySelector('iframe');
+                  if (iframe && w.contentData.url) iframe.src = w.contentData.url;
+                }
+              }
+              openWindows[w.id] = win;
+            });
+            updateTaskbarChips();
+          }
+          return true;
+        } catch (e) {
+          localStorage.removeItem('adi-os-state');
+          return false;
+        }
+      }
+
+      // Автосохранение при изменениях
+      window.addEventListener('beforeunload', saveState);
+      setInterval(saveState, 10000);
+
+      // ==================== УСТАНОВКА ОС ====================
+      function startSetup(osKey) {
+        currentOS = osKey;
+        glassSettings = { intensity: 0.8, type: 'matte' }; // сброс для новой установки
+        applyGlassEffect();
+        selectionScreen.style.display = 'none';
+        setupScreen.style.display = 'flex';
+        let stepIndex = 0;
+        const steps = ['step-welcome','step-language','step-license','step-disk','step-copy','step-features','step-final'];
+        function showStep(i) {
+          steps.forEach(id => document.getElementById(id).classList.remove('active'));
+          document.getElementById(steps[i]).classList.add('active');
+          if (steps[i] === 'step-welcome') {
+            animateProgress(document.querySelector('#step-welcome .setup-progress-fill'), 100, 2000, ()=>setTimeout(()=>nextStep(),400));
+          } else if (steps[i] === 'step-copy') {
+            animateProgress(document.querySelector('#step-copy .setup-progress-fill'), 100, 3500, ()=>{
+              document.getElementById('copy-status').textContent='100%';
+              setTimeout(()=>nextStep(),500);
+            });
+          } else if (steps[i] === 'step-features') {
+            animateProgress(document.querySelector('#step-features .setup-progress-fill'), 100, 3000, ()=>setTimeout(()=>nextStep(),400));
+          } else if (steps[i] === 'step-final') {
+            setTimeout(()=>finishSetup(), 2000);
+          }
+        }
+        function nextStep() {
+          if (stepIndex < steps.length-1) { stepIndex++; showStep(stepIndex); }
+        }
+        window.nextSetupStep = nextStep;
+        showStep(0);
+      }
+
+      function animateProgress(fill, target, duration, cb) {
+        let start = null;
+        function step(ts) {
+          if (!start) start = ts;
+          const p = Math.min((ts-start)/duration, 1);
+          fill.style.width = (p*target)+'%';
+          if (p<1) requestAnimationFrame(step); else if(cb) cb();
+        }
+        requestAnimationFrame(step);
+      }
+
+      function finishSetup() {
+        setupScreen.style.display = 'none';
+        mainScreen.style.display = 'block';
+        const cfg = osConfig[currentOS];
+        desktop.style.backgroundImage = cfg.wallpaper;
+        startBtn.textContent = cfg.isMac ? '🍎' : '⊞ Пуск';
+        applyGlassEffect();
+        createDesktopIcons();
+        buildStartMenu();
+        updateClock();
+        saveState();
+      }
+
+      // ==================== РАБОЧИЙ СТОЛ ====================
+      function createDesktopIcons() {
+        desktop.innerHTML = '';
+        appsList.forEach((app, i) => {
+          const el = document.createElement('div');
+          el.className = 'desktop-icon';
+          el.innerHTML = `<span class="icon-img">${app.icon}</span><span class="icon-label">${app.label}</span>`;
+          el.addEventListener('dblclick', () => openAppByIndex(i));
+          desktop.appendChild(el);
+        });
+      }
+
+      function openAppByIndex(index) {
+        const id = 'app-' + index + '-' + Date.now();
+        if (Object.values(openWindows).some(w => w.appIndex === index)) {
+          // фокусируем существующее
+          const existing = Object.entries(openWindows).find(([_,w])=>w.appIndex===index);
+          if (existing) bringToFront(existing[0]);
+          return;
+        }
+        const app = appsList[index];
+        const win = createWindow(id, app.label, app.createContent(), index);
+        openWindows[id] = win;
+        updateTaskbarChips();
+        saveState();
+      }
+
+      function createWindow(id, title, bodyHTML, appIndex) {
+        const winEl = document.createElement('div');
+        winEl.className = 'app-window';
+        winEl.id = 'win-' + id;
+        winEl.style.left = (100 + Object.keys(openWindows).length * 35) + 'px';
+        winEl.style.top = (80 + Object.keys(openWindows).length * 35) + 'px';
+        winEl.style.width = '480px';
+        winEl.style.height = '400px';
+        winEl.style.zIndex = ++windowZ;
+        winEl.innerHTML = `
+          <div class="window-header"><span>${title}</span><button class="window-close">✕</button></div>
+          <div class="window-body">${bodyHTML}</div>
+        `;
+        document.getElementById('main-screen').appendChild(winEl);
+        winEl.style.display = 'flex';
+
+        const header = winEl.querySelector('.window-header');
+        let dragging = false, offX, offY;
+        header.addEventListener('mousedown', (e) => {
+          if (e.target.classList.contains('window-close')) return;
+          dragging = true;
+          offX = e.clientX - winEl.offsetLeft;
+          offY = e.clientY - winEl.offsetTop;
+          bringToFront(id);
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!dragging) return;
+          winEl.style.left = (e.clientX - offX) + 'px';
+          winEl.style.top = (e.clientY - offY) + 'px';
+        });
+        document.addEventListener('mouseup', () => { dragging = false; });
+
+        winEl.querySelector('.window-close').addEventListener('click', (e) => {
+          e.stopPropagation();
+          closeWindow(id);
+        });
+        winEl.addEventListener('mousedown', () => bringToFront(id));
+
+        const winObj = { el: winEl, title, appIndex, contentData: null };
+        return winObj;
+      }
+
+      function closeWindow(id) {
+        if (!openWindows[id]) return;
+        const win = openWindows[id];
+        win.el.style.opacity = '0';
+        win.el.style.transform = 'scale(0.8)';
+        setTimeout(() => win.el.remove(), 250);
+        delete openWindows[id];
+        updateTaskbarChips();
+        saveState();
+      }
+
+      function bringToFront(id) {
+        if (!openWindows[id]) return;
+        openWindows[id].el.style.zIndex = ++windowZ;
+        document.querySelectorAll('.taskbar-chip').forEach(c => c.classList.remove('active'));
+        const chip = document.getElementById('chip-' + id);
+        if (chip) chip.classList.add('active');
+      }
+
+      function updateTaskbarChips() {
+        taskbarChips.innerHTML = '';
+        Object.keys(openWindows).forEach(id => {
+          const win = openWindows[id];
+          const chip = document.createElement('div');
+          chip.className = 'taskbar-chip';
+          chip.id = 'chip-' + id;
+          chip.textContent = win.title;
+          chip.addEventListener('click', () => bringToFront(id));
+          taskbarChips.appendChild(chip);
+        });
+      }
+
+      // ==================== ПРИЛОЖЕНИЯ ====================
+      function createFileManager() {
+        return `<div class="file-tree"><p class="folder">📂 Документы</p><p class="folder">📂 Изображения</p></div>`;
+      }
+
+      function createNotepad() {
+        return `<textarea class="notepad-textarea" placeholder="Введите текст..."></textarea>`;
+      }
+
+      function createCalculator() {
+        return `<div class="calc-display">0</div><div class="calc-buttons" onclick="handleCalcClick(event, this)">`+
+          ['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+','C'].map(v=>`<button>${v}</button>`).join('')+
+          `</div>`;
+      }
+
+      window.handleCalcClick = function(e, container) {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const display = container.parentElement.querySelector('.calc-display');
+        let cur = display.textContent;
+        const val = btn.textContent;
+        if (val === 'C') { display.textContent = '0'; return; }
+        if (val === '=') { try { display.textContent = eval(cur); } catch { display.textContent = 'Ошибка'; } return; }
+        if (cur === '0' && val !== '.') cur = '';
+        display.textContent = cur + val;
+      };
+
+      function createBrowser() {
+        // Настоящий браузер с iframe (используем сайты, разрешающие iframe)
+        return `
+          <div class="browser-url">
+            <input type="text" value="https://www.bing.com" placeholder="Введите URL" id="browser-url-input">
+            <button id="browser-go-btn" style="padding:8px 16px; background:#fff2; border:1px solid #fff3; color:#fff; border-radius:8px;">Перейти</button>
+          </div>
+          <iframe class="browser-iframe" src="https://www.bing.com" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+        `;
+      }
+
+      // Обработчики для браузера добавляются после создания окна
+      function setupBrowserEvents(winEl) {
+        const input = winEl.querySelector('#browser-url-input');
+        const iframe = winEl.querySelector('iframe');
+        const goBtn = winEl.querySelector('#browser-go-btn');
+        if (!input || !iframe || !goBtn) return;
+        goBtn.addEventListener('click', () => {
+          let url = input.value.trim();
+          if (!url.startsWith('http')) url = 'https://' + url;
+          iframe.src = url;
+          // Сохраняем URL в contentData
+          const winId = winEl.id.replace('win-', '');
+          if (openWindows[winId]) openWindows[winId].contentData = { url };
+          saveState();
+        });
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') goBtn.click();
+        });
+      }
+
+      function createMusicPlayer() {
+        return `<p>🎵 Liquid Glass Symphony</p><div class="player-controls"><button>⏮</button><button>▶️</button><button>⏭</button></div>`;
+      }
+
+      function createSettings() {
+        if (currentOS === 'mac26') {
+          return `
+            <p><b>⚙️ Настройки macOS 26</b></p>
+            <div class="glass-settings">
+              <p><b>💎 Жидкое стекло</b></p>
+              <label>Интенсивность: <input type="range" min="0" max="1" step="0.1" value="${glassSettings.intensity}" id="glass-intensity"></label>
+              <p>Тип: 
+                <select id="glass-type">
+                  <option value="matte" ${glassSettings.type==='matte'?'selected':''}>Матовое</option>
+                  <option value="glossy" ${glassSettings.type==='glossy'?'selected':''}>Глянцевое</option>
+                </select>
+              </p>
+            </div>
+          `;
+        } else {
+          return `<p><b>⚙️ Настройки ${osConfig[currentOS].name}</b></p><p>Стандартные параметры.</p>`;
+        }
+      }
+
+      function setupSettingsEvents(winEl) {
+        if (currentOS !== 'mac26') return;
+        const intensityInput = winEl.querySelector('#glass-intensity');
+        const typeSelect = winEl.querySelector('#glass-type');
+        if (intensityInput) {
+          intensityInput.addEventListener('input', () => {
+            glassSettings.intensity = parseFloat(intensityInput.value);
+            applyGlassEffect();
+            saveState();
+          });
+        }
+        if (typeSelect) {
+          typeSelect.addEventListener('change', () => {
+            glassSettings.type = typeSelect.value;
+            applyGlassEffect();
+            saveState();
+          });
+        }
+      }
+
+      function createTerminal() {
+        return `<div style="background:#000c; padding:10px; border-radius:8px; font-family:monospace; height:200px; overflow-y:auto;" id="terminal-out">> Добро пожаловать</div>
+        <input type="text" placeholder="Команда..." style="width:100%; margin-top:8px; background:#222; border:1px solid #fff3; color:#fff; padding:8px;" onkeydown="if(event.key==='Enter'){ runTerminal(this.value, this); this.value=''; }">`;
+      }
+
+      window.runTerminal = function(cmd, inputEl) {
+        const out = document.getElementById('terminal-out');
+        if (!out) return;
+        out.innerHTML += `<br>> ${cmd}`;
+        if (cmd === 'help') out.innerHTML += `<br>help clear date whoami`;
+        else if (cmd === 'clear') out.innerHTML = '>';
+        else if (cmd === 'date') out.innerHTML += `<br>${new Date()}`;
+        else if (cmd === 'whoami') out.innerHTML += `<br>user@${osConfig[currentOS].name}`;
+        else out.innerHTML += `<br>Неизвестная команда`;
+        out.scrollTop = out.scrollHeight;
+      };
+
+      function createPhotoViewer() {
+        return `<div style="text-align:center;font-size:40px;">🖼️<br>Галерея</div>`;
+      }
+
+      // ==================== МЕНЮ ПУСК ====================
+      function buildStartMenu() {
+        startMenu.innerHTML = '';
+        const items = [
+          {icon:'📁', text:'Проводник', action:()=>openAppByIndex(0)},
+          {icon:'📝', text:'Блокнот', action:()=>openAppByIndex(1)},
+          {icon:'⚙️', text:'Настройки', action:()=>openAppByIndex(5)},
+          {icon:'❌', text:'Завершение работы', action:()=>resetToSelection()}
+        ];
+        items.forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'menu-item';
+          el.innerHTML = `${item.icon} ${item.text}`;
+          el.addEventListener('click', (e) => {
+            item.action();
+            toggleStartMenu(false);
+          });
+          startMenu.appendChild(el);
+        });
+      }
+
+      function toggleStartMenu(show) {
+        if (show === false || (startMenuVisible && show !== true)) {
+          startMenu.style.display = 'none';
+          startMenuVisible = false;
+        } else {
+          startMenu.style.display = 'flex';
+          startMenuVisible = true;
+        }
+      }
+
+      startBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleStartMenu();
+      });
+      document.addEventListener('click', (e) => {
+        if (startMenuVisible && !startMenu.contains(e.target) && e.target !== startBtn) {
+          toggleStartMenu(false);
+        }
+      });
+
+      function resetToSelection() {
+        Object.keys(openWindows).forEach(id => closeWindow(id));
+        openWindows = {};
+        mainScreen.style.display = 'none';
+        selectionScreen.style.display = 'flex';
+        currentOS = null;
+        startMenuVisible = false;
+        startMenu.style.display = 'none';
+        desktop.innerHTML = '';
+        taskbarChips.innerHTML = '';
+        localStorage.removeItem('adi-os-state');
+      }
+
+      // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+      document.querySelectorAll('.os-card').forEach(card => {
+        card.addEventListener('click', () => {
+          const os = card.getAttribute('data-os');
+          if (os) startSetup(os);
+        });
+      });
+
+      // Перехват создания окон для добавления специфических обработчиков
+      const originalCreateWindow = createWindow;
+      createWindow = function(id, title, bodyHTML, appIndex) {
+        const win = originalCreateWindow(id, title, bodyHTML, appIndex);
+        if (appIndex === 3) { // браузер
+          setTimeout(() => setupBrowserEvents(win.el), 50);
+        } else if (appIndex === 5) { // настройки
+          setTimeout(() => setupSettingsEvents(win.el), 50);
+        }
+        // Сохранение контента при изменении (блокнот)
+        if (appIndex === 1) {
+          const ta = win.el.querySelector('textarea');
+          if (ta) {
+            ta.addEventListener('input', () => {
+              win.contentData = ta.value;
+              saveState();
+            });
+          }
+        }
+        // Для браузера сохранение URL при загрузке iframe
+        if (appIndex === 3) {
+          const iframe = win.el.querySelector('iframe');
+          if (iframe) {
+            iframe.addEventListener('load', () => {
+              try {
+                win.contentData = { url: iframe.src };
+                saveState();
+              } catch(e) {}
+            });
+          }
+        }
+        return win;
+      };
+
+      // Попытка восстановить состояние при загрузке
+      if (!loadState()) {
+        selectionScreen.style.display = 'flex';
+      } else {
+        // applyGlassEffect уже вызван в loadState
+      }
+
+      applyGlassEffect();
+    })();
+  </script>
+</body>
+</html>
